@@ -84,7 +84,6 @@ class Dataset():
         return None
 
     def image_extension(self):
-
         jpegfound = False
         self.img_ext = None
         for rootdir, dirs, files in os.walk('input'):
@@ -109,11 +108,11 @@ class Dataset():
         for label in annotation.labels:
             geometry = label.geometry
             obj_class = meta.get_obj_class(obj_class_name= label.name)
-            sly_label = sly.Label(geometry= geometry, obj_class= obj_class)
+            sly_label = sly.Label(geometry, obj_class)
             sly_labels.append(sly_label)
         sly_ann = sly.Annotation(img_size= annotation.img_size, labels=sly_labels,image_id= image_index)
         ann_json = sly_ann.to_json()
-        ann_path_json = os.path.join(self.ann_path, file +'.json')
+        ann_path_json = os.path.join('output_sly\\ann', file +'.json')
         sly.json.dump_json_file(ann_json, ann_path_json)
         pass
 
@@ -195,6 +194,58 @@ class Convert():
             print('Folders already created')
         pass
 
+    def upload():
+        path_advanced = os.path.expanduser("~\\env\\advanced.env")
+        path_local = os.path.expanduser("~\\env\\local.env")
+        path_supervisely = os.path.expanduser("~\\env\\supervisely.env")
+        if sly.is_production():
+            load_dotenv(path_advanced)
+        else:
+            load_dotenv(path_local)
+        load_dotenv(os.path.expanduser(path_supervisely ))
+        # Get ENV variables
+        WORKSPACE_ID = sly.env.workspace_id()
+        # Create api object to communicate with Supervisely Server
+        api = sly.Api.from_env()
+        # Initialize application
+        app = sly.Application()
+        input_name = input('Set project name \n')
+        # Create project and dataset on Supervisely server
+        project = api.project.create(WORKSPACE_ID, input_name , change_name_if_conflict=True)
+        dataset = api.dataset.create(project.id, "ds0", change_name_if_conflict=True)
+        project_id = project.id
+        path_to_meta = "output_sly\meta.json"
+        project_meta_json = load_json_file(path_to_meta)
+        api.project.update_meta(project_id, project_meta_json)
+        images_names = []
+        images_paths = []
+        for file in os.listdir('output_sly\img'):
+            file_path = os.path.join('output_sly\img', file)
+            images_names.append(file)
+            images_paths.append(file_path)
+        ann_names = []
+        ann_paths = []
+        for file in os.listdir('output_sly\\ann'):
+            file_path = os.path.join('output_sly\\ann', file)
+            ann_names.append(file)
+            ann_paths.append(file_path)
+        #Process folder with images and upload them to Supervisely server
+        with tqdm(total=len(images_paths)) as pbar:
+            for img_name, img_path, ann_path in zip(images_names, images_paths, ann_paths):
+                try:
+                    # Upload image and annotation into dataset on Supervisely server
+                    info = api.image.upload_path(dataset_id=dataset.id, name=img_name, path=img_path)
+                    sly.logger.trace(f"Image has been uploaded: id={info.id}, name={info.name}")
+                    inf_ann = api.annotation.upload_path(img_id= info.id, ann_path=ann_path)
+                    sly.logger.trace(f"Annotation has been uploaded")
+                except Exception as e:
+                    sly.logger.warn("Skip image", extra={"name": img_name, "reason": repr(e)})
+                finally:
+                    # Update progress bar
+                    pbar.update(1)
+        sly.logger.info(f"Result project: id={project.id}, name={project.name}")
+        pass
+
     def run(self):
         Convert.folder_creator()
         dataset = Dataset.format(self.dataset)
@@ -202,7 +253,7 @@ class Convert():
         meta = sly.ProjectMeta()
         for obj in dataset.getlabels(): 
             for label in obj.labels:
-                obj_class = sly.ObjClass(label.name, label.geometry)
+                obj_class = sly.ObjClass(label.name, type(label.geometry))
                 meta = meta.add_obj_class(obj_class)
         meta_json = meta.to_json()
         sly.json.dump_json_file(meta_json, os.path.join('output_sly', "meta.json"))
@@ -213,6 +264,12 @@ class Convert():
             Dataset.create_annotation(dataset, file, annotation, meta, image_index=i)
             i+=1
         print('DONE')
+        print('Upload to Supervisely? Insert Y for Yes, else for NO')
+        command = input()
+        if command == 'Y' or 'y':
+            Convert.upload()
+        else:
+            pass
 
 
 dataset = Dataset()
