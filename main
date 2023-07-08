@@ -14,83 +14,99 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 from supervisely.io.json import load_json_file
 
-class Label():
-    def __init__(self, data, img_size):
-        self.name = data[0]
-        self.img_size = img_size
-        if len(data[1])==4:
-            bbox = data[1]
-            self.geometry = sly.Rectangle(left= bbox[0],top= bbox[1],right= bbox[2],bottom= bbox[3])
-        elif len(data[1])>4:
-            segmentation = data[1]
-            self.geometry = sly.Polygon(segmentation)
-        else:
-            self.geometry = sly.Bitmap(data[1])
-    pass
+class Image():
 
+    @classmethod
+    def pixeliz(cls,
+                img_path: str):
+        img = sly.imaging.image.read(img_path)
+        mask = img[:, :, 0].astype(int)
+        return mask
+    
+    @classmethod
+    def getsize(cls,
+                mask):
+        return len(mask) , len(mask[0]) 
+
+    def __init__(self,
+                 img_path = None):
+        if not img_path:
+            raise NotImplemented('Image not founded')
+        self.img_path = img_path
+        self.height, self.width = self.getsize(self.pixeliz(self.img_path))
+        self.size = self.height, self.width
+        self.name = os.path.basename(self.img_path)
+                
 class Annotation():
-    def __init__(self, data, img_size) ->list:
+    def __init__(self,
+                 data: list or tuple, #list of label+(geometry), example [[lable_name,(geometry)],[label,(geomerty)]...]
+                 image: Image)->list:
         self.labels = []
-        self.img_size = img_size
+        self.image = image
         for obj in data:
-            label = Label(obj, img_size)
+            label = Label(obj)
             self.labels.append(label)
         pass
 
-class Dataset():
-    def __init__(self, name = "Dataset_1", data_path = "~/input", 
-                img_path = None, ann_path = None, img_ext = 'None', labels = []):
-        self.name = name
-        self.data_path = data_path
-        self.img_ext = img_ext
-        self.img_path = img_path
-        self.ann_path = ann_path
-        self.labels = labels
-        print(f'{self.name} found at {self.data_path} "')
-        pass
-
-    def format(self):
-        for rootdir, dirs, files in os.walk('input'):
-            for file in files:       
-                if file.endswith(".yaml"):
-                    self = Yolo(self)
-                    return self
-                elif file.endswith(".xml" or ".png"):
-                    self = Pascal(self)
-                    return self
-                elif file == 'instances.json':
-                    self = Coco(self)
-                    return self
-                elif file.endswith(".json"):
-                    self = Cityscapes(self)
-                    return self
-                elif Dataset.image_extension(self) == 'mask':
-                    #self = Mask(self)
-                    #Mask.convert(self)
-                    break
-
-    def findby_ext(self, extension):
-        for rootdir, dirs, files in os.walk('input'):
-            for file in files:       
-                if((file.split('.')[-1])==extension):
-                    return rootdir, os.path.join(rootdir, file), file
-        return None
+    # def __iter__(self):
+    #     self.index = 0
+    #     return self.labels
     
-    def findby_name(self, name):
-        for rootdir, dirs, files in os.walk('input'):
+    # def __next__(self):
+    #     if self.index <= len(self.labels):
+    #         self.index+=1
+    #         return self.labels[self.index]
+    
+class Label():
+    def __init__(self,
+                 obj : tuple or list): #[lable_name,(geometry)]
+        self.name = obj[0]
+        self.geometry = obj[1]
+        if len(self.geometry) == 4:
+            self.geometry = sly.Rectangle(left= self.geometry[0],
+                                          top= self.geometry[1],
+                                          right= self.geometry[2],
+                                          bottom= self.geometry[3])
+        elif len(self.geometry) > 4:
+            self.geometry = sly.Polygon(self.geometry)
+        else:
+            self.geometry = sly.Bitmap(self.geometry)
+
+class Dataset():
+    data_path = 'input'
+
+    @classmethod
+    def findby_ext(cls, extension):
+        for rootdir, dirs, files in os.walk(cls.data_path):
+            for file in files:       
+                if file.endswith(extension):
+                    return rootdir, os.path.join(rootdir, file), file
+                
+    @classmethod
+    def findby_name(cls, name):
+        for rootdir, dirs, files in os.walk(cls.data_path):
             for file in files:       
                 if name in file:
                     return rootdir, os.path.join(rootdir, file), file
         return None
 
-    def image_extension(self):
-        jpegfound = False
+    def __init__(self, name = "Dataset_1"):
+        self.root= []
+        self.name = name
+        self.img_ext = self.img_ext_func()
+        if not self.img_ext:
+            raise NotImplementedError()
+        self.img_path = self.findby_ext(self.img_ext)[0]
+        print(f'{self.name} found at {self.data_path} "')
+
+    def img_ext_func(self):
+        jpegfound = False # means that image ISNOT png file 
         self.img_ext = None
-        for rootdir, dirs, files in os.walk('input'):
+        for rootdir, dirs, files in os.walk(self.data_path):
             for file in files:
                 if file.endswith('jpg'):
                     self.img_ext = 'jpg'
-                    jpegfound = True # means that image ISNOT png file 
+                    jpegfound = True 
                 elif file.endswith('jpeg'):
                     self.img_ext = 'jpeg'
                     jpegfound = True
@@ -102,99 +118,67 @@ class Dataset():
                         return 'mask'
         return self.img_ext
 
-    def create_annotation(self, file, annotation, meta, image_index):
-        '''ANNOTATION - LIST OF TUPLES, EXAMPLE: [(kiwi,[193,92,255,192]),....]'''
-        sly_labels = []
-        for label in annotation.labels:
-            geometry = label.geometry
-            obj_class = meta.get_obj_class(obj_class_name= label.name)
-            sly_label = sly.Label(geometry, obj_class)
-            sly_labels.append(sly_label)
-        sly_ann = sly.Annotation(img_size= annotation.img_size, labels=sly_labels,image_id= image_index)
-        ann_json = sly_ann.to_json()
-        ann_path_json = os.path.join('output_sly\\ann', file +'.json')
-        sly.json.dump_json_file(ann_json, ann_path_json)
-        pass
+    def scan(self):
+        flag = True
+        root = []
+        for img in os.listdir(self.img_path):
+            img = Image(os.path.join(self.img_path, img))
+            ann_file = self.findby_name(os.path.splitext(img.name)[0])
+            if flag:
+                if ann_file[2].endswith(".yaml"):
+                    self = Yolo(self)
+                    flag = False
+                elif ann_file[2].endswith(".xml" or ".png"):
+                    self = Pascal(self)
+                    flag = False
+                elif ann_file[2] == None:
+                    self = Coco(self)
+                    flag = False
+                elif ann_file[2].endswith(".json"):
+                    self = Cityscapes(self)
+                    flag = False
+                elif Dataset.image_extension(self) == 'mask':
+                #self = Mask(self)
+                #Mask.convert(self)
+                    raise ImportError
+            annotation = Annotation(self.parse(ann_file[1]), img)
+            root.append((img, annotation))
+        return root
 
-class Yolo(Dataset): #WORKS
-    def __init__(self, data_path):
-        name = 'YOLO_Dataset'
-        self.img_path = Dataset.findby_ext(Dataset.image_extension(self))
-        self.ann_path = Dataset.findby_ext('json')
-        super().__init__(self, name, data_path, img_path = None, ann_path = None)
-    
-    def getlabels(self):
-        yaml_meta = Dataset.findby_ext(self, 'yaml')[1]
-        with open(yaml_meta) as f:
-            data = yaml.load(f, Loader=SafeLoader)
-            names = data['names']
-        return names
-
-class Pascal(Dataset): #WORKS
-    def __init__(self, name="Dataset_1", data_path="~/input"):
-        name = 'Pacsal_Dataset'
-        self.img_path = Dataset.findby_ext(self, Dataset.image_extension(self))[0]
-        self.ann_path = Dataset.findby_ext(self, 'xml')[0]
-        super().__init__(name, data_path, img_path=self.img_path, ann_path=self.ann_path)
-        
-    def getlabels(self):
-        for file in os.listdir(self.ann_path):
-            annotation = Pascal.parse(self, os.path.join(self.ann_path, file))
-            names = []
-            for item in annotation.labels:
-                names.append(item.name)
-        return np.unique(annotation)
-    
-    def parse(self, path_to_xml):
-        # parse xml file
-        assert os.path.isfile(path_to_xml)
-        tree = ET.parse(path_to_xml) 
-        root = tree.getroot()
-        annotation = []
-        height = int(root.find("size")[0].text)
-        width = int(root.find("size")[1].text)
-        img_size = width, height
-        for member in root.findall('object'):
-            # bbox coordinates
-            xmin = int(member[5][0].text)
-            ymin = int(member[5][1].text)
-            xmax = int(member[5][2].text)
-            ymax = int(member[5][3].text) 
-            # store data in list
-            annotation.append([member[0].text, (xmin, ymin, xmax, ymax)])
-        annotation = Annotation(annotation, img_size)
-        return annotation
-   
-class Coco(Dataset):
-    def __init__(self, name="Dataset_1", data_path="~/input"):
-        super().__init__(name, data_path)
-
-class Cityscapes(Dataset):
-    def __init__(self, name="Dataset_1", data_path="~/input"):
-        name = 'Cityscapes_Dataset'
-        super().__init__(name, data_path)
-    
-class Convert():
-    def __init__(self, input = 'input', dataset = None):
-        self.input = input
-        self.dataset = dataset
-    
-    def img_moover(self, extension, file_source = 'input'):
-        for rootdir, dirs, files in os.walk(file_source):
-            for file in files: 
-                    if file.endswith(extension):
-                        shutil.copy2(os.path.join(rootdir, file),'output_sly/img')
-        pass
-        
-    def folder_creator():
+    def dump_sly(self):
         try:
-            os.makedirs('output_sly/ann')
-            os.makedirs('output_sly/img')
+            os.makedirs(os.path.join('output_sly', 'ann'))
+            os.makedirs(os.path.join('output_sly', 'img'))
         except Exception as e:
             print('Folders already created')
-        pass
+        meta = sly.ProjectMeta()
+        uniq_cats = []
+        for obj in self.root:
+            for label in obj[1].labels:
+                uniq_cats.append((label.name, type(label.geometry)))
+        uniq_cats = set(uniq_cats)
+        for cat in uniq_cats:
+            obj_class = sly.ObjClass(cat[0], cat[1])
+            meta = meta.add_obj_class(obj_class)
+        meta_json = meta.to_json()
+        sly.json.dump_json_file(meta_json, os.path.join('output_sly', "meta.json"))
+        i=0
+        for obj in self.root:
+            shutil.copy2(os.path.join(obj[0].img_path),'output_sly/img')
+            sly_labels = []
+            for label in obj[1].labels:
+                geometry = label.geometry
+                obj_class = meta.get_obj_class(obj_class_name= label.name)
+                sly_label = sly.Label(geometry, obj_class)
+                sly_labels.append(sly_label)
+            sly_ann = sly.Annotation(img_size= obj[0].size, labels=sly_labels,image_id= i)
+            ann_json = sly_ann.to_json()
+            ann_path_json = os.path.join('output_sly\\ann', obj[0].name +'.json')
+            sly.json.dump_json_file(ann_json, ann_path_json)
+            i+=1
+        print('DONE')
 
-    def upload():
+    def upload(self):
         path_advanced = os.path.expanduser("~\\env\\advanced.env")
         path_local = os.path.expanduser("~\\env\\local.env")
         path_supervisely = os.path.expanduser("~\\env\\supervisely.env")
@@ -246,43 +230,43 @@ class Convert():
         sly.logger.info(f"Result project: id={project.id}, name={project.name}")
         pass
 
-    def run(self):
-        Convert.folder_creator()
-        dataset = Dataset.format(self.dataset)
-        Convert.img_moover(dataset, extension=Dataset.image_extension(dataset))
-        meta = sly.ProjectMeta()
-        for obj in dataset.getlabels(): 
-            for label in obj.labels:
-                obj_class = sly.ObjClass(label.name, type(label.geometry))
-                meta = meta.add_obj_class(obj_class)
-        meta_json = meta.to_json()
-        sly.json.dump_json_file(meta_json, os.path.join('output_sly', "meta.json"))
-        i=0
-        for file in os.listdir('output_sly/img'):
-            annotation_path = Dataset.findby_name(dataset, file[:6])[1]
-            annotation = dataset.parse(annotation_path)
-            Dataset.create_annotation(dataset, file, annotation, meta, image_index=i)
-            i+=1
-        print('DONE')
-        print('Upload to Supervisely? Insert Y for Yes, else for NO')
-        command = input()
-        if command == 'Y' or 'y':
-            Convert.upload()
-        else:
-            pass
+class Coco(Dataset):
+    def __init__(self, name="Dataset_1", data_path="~/input"):
+        super().__init__(name, data_path)
 
+class Cityscapes(Dataset):
+    def __init__(self, name="Dataset_1", data_path="~/input"):
+        name = 'Cityscapes_Dataset'
+        super().__init__(name, data_path)
 
-dataset = Dataset()
-converter = Convert(dataset=dataset)
-converter.run()
+class Pascal(Dataset): #WORKS WITH RECTANGLE
+    def __init__(self, name='Pacsal_Dataset'):
+        self.ann_path = Dataset.findby_ext('xml')[0]
+        super().__init__(name=name)
 
+    def parse(self, path_to_xml):
+        # parse xml file
+        assert os.path.isfile(path_to_xml)
+        tree = ET.parse(path_to_xml) 
+        root = tree.getroot()
+        annotation = []
+        for member in root.findall('object'):
+            # bbox coordinates
+            xmin = int(member[5][0].text)
+            ymin = int(member[5][1].text)
+            xmax = int(member[5][2].text)
+            ymax = int(member[5][3].text) 
+            # store data in list
+            annotation.append([member[0].text, (xmin, ymin, xmax, ymax)])
+        return annotation
 
+class Yolo(Dataset): 
+    def __init__(self, data_path):
+        name = 'YOLO_Dataset'
+        self.ann_path = Dataset.findby_ext('json')
+        super().__init__(self, name=name)
 
-
-
-        
-
-
-
-
-
+a = Dataset()
+a.root = a.scan()
+a.dump_sly()
+a.upload()
