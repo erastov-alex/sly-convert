@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 from supervisely.io.json import load_json_file
 
 class Image():
-
     @classmethod
     def pixeliz(cls,
                 img_path: str):
@@ -62,12 +61,12 @@ class Label():
                  obj : tuple or list): #[lable_name,(geometry)]
         self.name = obj[0]
         self.geometry = obj[1]
-        if len(self.geometry) == 4:
+        if len(self.geometry[0]) == 1:
             self.geometry = sly.Rectangle(left= self.geometry[0],
                                           top= self.geometry[1],
                                           right= self.geometry[2],
                                           bottom= self.geometry[3])
-        elif len(self.geometry) > 4:
+        elif len(self.geometry[0]) == 2:
             self.geometry = sly.Polygon(self.geometry)
         else:
             self.geometry = sly.Bitmap(self.geometry)
@@ -83,11 +82,17 @@ class Dataset():
                     return rootdir, os.path.join(rootdir, file), file
                 
     @classmethod
-    def findby_name(cls, name):
-        for rootdir, dirs, files in os.walk(cls.data_path):
-            for file in files:       
-                if name in file:
-                    return rootdir, os.path.join(rootdir, file), file
+    def findby_name(cls, 
+                    name,
+                    datapath = 'input',
+                    avoid_path = None):
+        for rootdir, dirs, files in os.walk(datapath):
+            if rootdir == avoid_path:
+                continue
+            else:
+                for file in files:       
+                    if name in file:
+                        return rootdir, os.path.join(rootdir, file), file
         return None
 
     def __init__(self, name = "Dataset_1"):
@@ -97,6 +102,7 @@ class Dataset():
         if not self.img_ext:
             raise NotImplementedError()
         self.img_path = self.findby_ext(self.img_ext)[0]
+        self.ann_path = 'input'
         print(f'{self.name} found at {self.data_path} "')
 
     def img_ext_func(self):
@@ -116,6 +122,8 @@ class Dataset():
                     else:
                         print('PNG MASKs FOUNDED')
                         return 'mask'
+        if not self.img_ext:
+            raise NotImplemented
         return self.img_ext
 
     def scan(self):
@@ -123,25 +131,31 @@ class Dataset():
         root = []
         for img in os.listdir(self.img_path):
             img = Image(os.path.join(self.img_path, img))
-            ann_file = self.findby_name(os.path.splitext(img.name)[0])
-            if flag:
-                if ann_file[2].endswith(".yaml"):
-                    self = Yolo(self)
-                    flag = False
-                elif ann_file[2].endswith(".xml" or ".png"):
-                    self = Pascal(self)
-                    flag = False
-                elif ann_file[2] == None:
-                    self = Coco(self)
-                    flag = False
-                elif ann_file[2].endswith(".json"):
-                    self = Cityscapes(self)
-                    flag = False
-                elif Dataset.image_extension(self) == 'mask':
-                #self = Mask(self)
-                #Mask.convert(self)
-                    raise ImportError
-            annotation = Annotation(self.parse(ann_file[1]), img)
+            if self.__class__ != Coco:   
+                ann_file = self.findby_name(os.path.splitext(img.name)[0],
+                                            datapath=self.ann_path,
+                                            avoid_path=self.img_path)
+                if flag:
+                    if ann_file == None:
+                        ann_file = self.findby_name('instances.json')
+                        self = Coco(self)
+                        flag = False
+                    elif ann_file[2].endswith(".yaml"):
+                        self = Yolo(self)
+                        flag = False
+                    elif ann_file[2].endswith(".xml" or ".mat"):
+                        self = Pascal(self)
+                        flag = False
+                    elif ann_file[2].endswith(".json"):
+                        self = Cityscapes(self)
+                        flag = False
+                    elif self.img_ext == 'mask':
+                    #self = Mask(self)
+                    #Mask.convert(self)
+                        raise ImportError
+            else:
+                ann_file = self.findby_name('instances.json')
+            annotation = Annotation(self.parse(ann_file[1],img), img)
             root.append((img, annotation))
         return root
 
@@ -230,21 +244,52 @@ class Dataset():
         sly.logger.info(f"Result project: id={project.id}, name={project.name}")
         pass
 
-class Coco(Dataset):
-    def __init__(self, name="Dataset_1", data_path="~/input"):
-        super().__init__(name, data_path)
+class Coco(Dataset):#WORKS WITH POLYGONS
+    def __init__(self, name="Coco"):
+        super().__init__(name=name)
+        self.ann_path = Dataset.findby_ext('json')[0]
+    
+    def segmentation_data_fixer(self, segmentation):
+        segmentation_result=[]
+        list_hash = []
+        for i in range(len(segmentation[0])):
+            list_hash.append(segmentation[0][i])
+            if len(list_hash) == 2:
+                list_hash.reverse()
+                segmentation_result.append(list_hash)
+                list_hash=[]
+        return segmentation_result
+
+    def parse(self,
+              path_to_instances: str,
+              img: Image):
+        annotation = []
+        coco = COCO(path_to_instances)
+        categories = coco.cats
+        images = coco.imgs
+        annotations = coco.imgToAnns
+        for key, value in images.items():
+            if value['file_name'] == img.name:
+                for label in annotations[key]:
+                    geometry = self.segmentation_data_fixer(label['segmentation'])
+                    cat_id = label["category_id"]
+                    label_name = categories[cat_id]['name']
+                    annotation.append([label_name, geometry])
+        return annotation
 
 class Cityscapes(Dataset):
     def __init__(self, name="Dataset_1", data_path="~/input"):
         name = 'Cityscapes_Dataset'
         super().__init__(name, data_path)
 
-class Pascal(Dataset): #WORKS WITH RECTANGLE
+class Pascal(Dataset): #WORKS WITH RECTANGLES
     def __init__(self, name='Pacsal_Dataset'):
-        self.ann_path = Dataset.findby_ext('xml')[0]
         super().__init__(name=name)
+        self.ann_path = Dataset.findby_ext('xml')[0]
 
-    def parse(self, path_to_xml):
+    def parse(self,
+              path_to_xml: str,
+              img: Image):
         # parse xml file
         assert os.path.isfile(path_to_xml)
         tree = ET.parse(path_to_xml) 
@@ -252,12 +297,14 @@ class Pascal(Dataset): #WORKS WITH RECTANGLE
         annotation = []
         for member in root.findall('object'):
             # bbox coordinates
+            label_name = member[0].text
             xmin = int(member[5][0].text)
             ymin = int(member[5][1].text)
             xmax = int(member[5][2].text)
-            ymax = int(member[5][3].text) 
+            ymax = int(member[5][3].text)
+            geometry = xmin, ymin, xmax, ymax
             # store data in list
-            annotation.append([member[0].text, (xmin, ymin, xmax, ymax)])
+            annotation.append([label_name, geometry])
         return annotation
 
 class Yolo(Dataset): 
