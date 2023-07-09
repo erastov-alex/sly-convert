@@ -8,7 +8,8 @@ from pycocotools.coco import COCO
 import numpy as np
 import json
 import shutil
-from PIL import Image
+from PIL import Image as pil
+from skimage.io import imread
 
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -17,22 +18,34 @@ from supervisely.io.json import load_json_file
 class Image():
     @classmethod
     def pixeliz(cls,
-                img_path: str):
+                img_path: str): 
         img = sly.imaging.image.read(img_path)
-        mask = img[:, :, 0].astype(int)
+        img = np.array(img)
+        width = len(img)
+        height = len(img[0])
+        mask= []
+        for x in range(width):
+            mask_line= []
+            for y in range(height):
+                mask_line.append(img[x][y])
+            mask.append(mask_line)
+        # mask = img[:, :, 0].astype(int)
         return mask
     
     @classmethod
     def getsize(cls,
                 mask):
         return len(mask) , len(mask[0]) 
-
+    
     def __init__(self,
                  img_path = None):
         if not img_path:
             raise NotImplemented('Image not founded')
         self.img_path = img_path
-        self.height, self.width = self.getsize(self.pixeliz(self.img_path))
+        image = pil.open(img_path)
+        self.width = image.size[0] #Определяем ширину. 
+        self.height = image.size[1]
+        # self.height, self.width = self.getsize(self.pixeliz(self.img_path))
         self.size = self.height, self.width
         self.name = os.path.basename(self.img_path)
                 
@@ -57,29 +70,57 @@ class Annotation():
     #         return self.labels[self.index]
     
 class Label():
+
+    @classmethod
+    def rect(cls,
+               geometry: list):
+        if geometry[0][0] == geometry[1][0] and geometry[1][1] == geometry[2][1]:
+            if geometry[2][0] == geometry[3][0] and geometry[3][1] == geometry[3][1]:
+                left= geometry[0][1]
+                top= geometry[0][0]
+                right= geometry[2][1]
+                bottom= geometry[2][0]
+                return left, top, right, bottom
+        return None
+
     def __init__(self,
                  obj : tuple or list): #[lable_name,(geometry)]
         self.name = obj[0]
         self.geometry = obj[1]
-        if len(self.geometry[0]) == 1:
+        if len(self.geometry) == 4:
             self.geometry = sly.Rectangle(left= self.geometry[0],
                                           top= self.geometry[1],
                                           right= self.geometry[2],
                                           bottom= self.geometry[3])
         elif len(self.geometry[0]) == 2:
-            self.geometry = sly.Polygon(self.geometry)
+            if self.rect(self.geometry):
+                bbox = self.rect(self.geometry)
+                self.geometry = sly.Rectangle(left= bbox[0],
+                                          top= bbox[1],
+                                          right= bbox[2],
+                                          bottom= bbox[3])
+            else:
+                self.geometry = sly.Polygon(self.geometry)
         else:
+            # mask = np.array(self.geometry, dtype=np.bool_) 
             self.geometry = sly.Bitmap(self.geometry)
 
 class Dataset():
     data_path = 'input'
 
     @classmethod
-    def findby_ext(cls, extension):
-        for rootdir, dirs, files in os.walk(cls.data_path):
-            for file in files:       
-                if file.endswith(extension):
-                    return rootdir, os.path.join(rootdir, file), file
+    def findby_ext(cls,
+                   extension: str,
+                   datapath = 'input',
+                   avoid_path = None):
+        for rootdir, dirs, files in os.walk(datapath):
+            if rootdir == avoid_path:
+                continue
+            else:
+                for file in files:       
+                   if file.endswith(extension):
+                        return rootdir, os.path.join(rootdir, file), file
+        return None
                 
     @classmethod
     def findby_name(cls, 
@@ -98,6 +139,7 @@ class Dataset():
     def __init__(self, name = "Dataset_1"):
         self.root= []
         self.name = name
+        self.mask = False
         self.img_ext = self.img_ext_func()
         if not self.img_ext:
             raise NotImplementedError()
@@ -121,7 +163,7 @@ class Dataset():
                         self.img_ext = 'png'
                     else:
                         print('PNG MASKs FOUNDED')
-                        return 'mask'
+                        self.mask = True
         if not self.img_ext:
             raise NotImplemented
         return self.img_ext
@@ -140,7 +182,7 @@ class Dataset():
                         ann_file = self.findby_name('instances.json')
                         self = Coco(self)
                         flag = False
-                    elif ann_file[2].endswith(".yaml"):
+                    elif ann_file[2].endswith(".txt"):
                         self = Yolo(self)
                         flag = False
                     elif ann_file[2].endswith(".xml" or ".mat"):
@@ -244,7 +286,7 @@ class Dataset():
         sly.logger.info(f"Result project: id={project.id}, name={project.name}")
         pass
 
-class Coco(Dataset):#WORKS WITH POLYGONS
+class Coco(Dataset):#WORKS WITH POLYGONS AND RECTANGLES
     def __init__(self, name="Coco"):
         super().__init__(name=name)
         self.ann_path = Dataset.findby_ext('json')[0]
@@ -282,10 +324,91 @@ class Cityscapes(Dataset):
         name = 'Cityscapes_Dataset'
         super().__init__(name, data_path)
 
-class Pascal(Dataset): #WORKS WITH RECTANGLES
+class Pascal(Dataset): #WORKS WITH BITMAPS AND RECTANGLES
     def __init__(self, name='Pacsal_Dataset'):
         super().__init__(name=name)
         self.ann_path = Dataset.findby_ext('xml')[0]
+
+    def mask_creator(self, mask_origin, cat_origin): #creating bool type array using mask and category
+        mask_currect = []
+        cat_origin = [int(cat) for cat in cat_origin]
+        for line_y in mask_origin:
+            mask_line= []
+            for line_x in line_y:
+                line_x = [int(c) for c in line_x]
+                if line_x == cat_origin:
+                    mask_line.append(1)
+                else:
+                    mask_line.append(0)
+            mask_currect.append(mask_line)
+        return mask_currect
+    
+    def get_unique_numbers(self, array):
+        unique = []
+        for x in array:
+            for y in x: 
+                if list(y) not in unique:
+                    unique.append(list(y))
+        return unique
+    
+    def maskin(self, mask1, mask2):
+        mask1 = list(mask1)
+        mask2 = list(mask2)
+        for obj in zip(mask1,mask2):
+            d = zip(obj[0],obj[1])
+            for item_y in d:
+                if item_y == (True, True):
+                    return True
+        return False
+
+    def mask_parse(self,
+                   path_to_xml: str,
+                   img: Image):
+        annotation = []
+        colors = open(self.findby_ext('txt')[1], 'r')
+        label_color = [line.strip() for line in colors]
+        label_color = [name.split() for name in label_color]
+        labels = []
+        label_dict = dict()
+        for obj in label_color:
+            label_dict[obj[0]]= [int(cord) for cord in obj[1:]]
+        print(label_dict)
+        mask_path_1 = self.findby_name(os.path.splitext(img.name)[0] + '.png',
+                                        datapath=self.data_path,
+                                        avoid_path=self.img_path)
+        mask1 = Image(mask_path_1[1])
+        mask1_array = mask1.pixeliz(mask1.img_path)
+        mask_path_2 = self.findby_name(os.path.splitext(img.name)[0] + '.png',
+                                        datapath=self.data_path,
+                                        avoid_path=mask_path_1[0])
+        mask2 = Image(mask_path_2[1])
+        mask2_array = mask2.pixeliz(mask2.img_path)
+        uniq2_colors = self.get_unique_numbers(mask2_array)
+        uniq_colors = self.get_unique_numbers(mask1_array)
+        bitmaps_obj = []
+        bitmaps_cls = dict()
+        for obj in uniq_colors:
+            if obj in label_dict.values() and obj != [0,0,0] and obj != label_dict['neutral']:
+                obj_mask = mask2_array
+                obj_uniq = uniq2_colors
+                class_mask = mask1_array
+                class_uniq = uniq_colors 
+        for label in class_uniq:
+            if label != [0, 0, 0] and label_dict['neutral'] != label:
+                bitmap = self.mask_creator(class_mask, label)
+                bitmap = np.array(bitmap, dtype=np.bool_)
+                for item in label_dict.items():
+                    if label in item:
+                        bitmaps_cls[item[0]] = bitmap
+        for obj in obj_uniq:
+            if  obj != [0,0,0] and obj != label_dict['neutral']:
+                bitmap = self.mask_creator(obj_mask, obj)
+                bitmap = np.array(bitmap, dtype=np.bool_)
+                for map in bitmaps_cls.items():
+                    if self.maskin(bitmap, map[1]):
+                        label_name = map[0]
+                        annotation.append((label_name, bitmap))
+        return annotation
 
     def parse(self,
               path_to_xml: str,
@@ -295,23 +418,57 @@ class Pascal(Dataset): #WORKS WITH RECTANGLES
         tree = ET.parse(path_to_xml) 
         root = tree.getroot()
         annotation = []
+        if self.mask:
+            return self.mask_parse(path_to_xml,img)
         for member in root.findall('object'):
-            # bbox coordinates
-            label_name = member[0].text
-            xmin = int(member[5][0].text)
-            ymin = int(member[5][1].text)
-            xmax = int(member[5][2].text)
-            ymax = int(member[5][3].text)
-            geometry = xmin, ymin, xmax, ymax
+            for name in member.findall('name'):
+                label_name = str(name.text)
+            for cord in member.findall('bndbox'):
+                xmin = int(cord[0].text)
+                ymin = int(cord[1].text)
+                xmax = int(cord[2].text)
+                ymax = int(cord[3].text)
+                geometry = xmin, ymin, xmax, ymax
             # store data in list
             annotation.append([label_name, geometry])
         return annotation
 
-class Yolo(Dataset): 
-    def __init__(self, data_path):
-        name = 'YOLO_Dataset'
-        self.ann_path = Dataset.findby_ext('json')
-        super().__init__(self, name=name)
+class Yolo(Dataset):#WORKS WITH RECTANGLES
+    def __init__(self, name="Yolo"):
+        super().__init__(name=name)
+        self.ann_path = self.findby_ext('txt')[0]
+
+    def bbox_converter(self, bbox_YOLO, img_size):
+        #[x_center, y_center, width(x), height(y)]
+        bbox_YOLO = [float(item) for item in bbox_YOLO]
+        x_center = bbox_YOLO[0]*img_size[1]
+        y_center = bbox_YOLO[1]*img_size[0]
+        width_yolo = bbox_YOLO[2]*img_size[1]
+        height_yolo = bbox_YOLO[3]*img_size[0]
+        left = x_center - width_yolo/2  
+        top = y_center - height_yolo/2
+        right = x_center + width_yolo/2 
+        bottom = y_center + height_yolo/2
+        bbox_SLY = left, top, right, bottom   
+        return bbox_SLY
+
+    def parse(self,
+              path_to_instances: str,
+              img: Image):
+        annotation= []
+        yaml_meta = self.findby_ext('yaml')[1]
+        with open(yaml_meta) as f:
+            data = yaml.load(f, Loader=SafeLoader)
+            names = data['names']
+        f = open(path_to_instances, 'r')
+        annotation_yolo_root = [line.strip() for line in f]
+        for item in annotation_yolo_root:
+            item = item.split(' ')
+            item = names[int(item[0])], self.bbox_converter(item[1:], img.size)
+            annotation.append(item) 
+        return annotation
+        
+        
 
 a = Dataset()
 a.root = a.scan()
