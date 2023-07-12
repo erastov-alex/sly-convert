@@ -11,19 +11,19 @@ It contains tools for detecting and working with datasets presented in supported
 - [Cityscapes](https://www.section.io/engineering-education/understanding-pascal-voc-dataset/)*
 
 ### Supported shapes:
-*COCO*: polygon segmentation; object rectangles 
-*YOLO*: polygon segmentation; object rectangles 
-*Pascal VOC*: object,class segmentation using png masks; object rectangles 
-*Cityscapes*: polygon segmentation
+COCO: polygon segmentation; object rectangles
+YOLO: polygon segmentation; object rectangles 
+Pascal VOC: object,class segmentation using png masks; object rectangles 
+Cityscapes: polygon segmentation
 
 ### Main functions:
--*scan* 
+-scan
     -input: Dataset in supported format
     -output: Dataset root (more about- click) 
--*dump_sly*
+-dump_sly
     -input: Dataset root
     -output: Dataset in [Supervisely](https://supervisely.com/) format
--*upload*
+-upload
     -Upload local output to Supervisely
 
 ## Requirements:
