@@ -5,26 +5,28 @@ ____
 
 Introduce computer vision dataset manager designed for using in deep learning projects.
 It contains tools for detecting and working with datasets presented in supported formats:
-*- [COCO](https://opencv.org/blog/2021/10/12/introduction-to-the-coco-dataset/)
+
+- [COCO](https://opencv.org/blog/2021/10/12/introduction-to-the-coco-dataset/)
 - [YOLO](https://www.section.io/engineering-education/introduction-to-yolo-algorithm-for-object-detection/)
 - [Pascal VOC](https://www.section.io/engineering-education/understanding-pascal-voc-dataset/)
-- [Cityscapes](https://www.section.io/engineering-education/understanding-pascal-voc-dataset/)*
+- [Cityscapes](https://www.section.io/engineering-education/understanding-pascal-voc-dataset/)
+
 
 ### Supported shapes:
-COCO: polygon segmentation; object rectangles
-YOLO: polygon segmentation; object rectangles 
-Pascal VOC: object,class segmentation using png masks; object rectangles 
-Cityscapes: polygon segmentation
+- COCO: polygon segmentation; object rectangles
+- YOLO: polygon segmentation; object rectangles 
+- Pascal VOC: object,class segmentation using png masks; object rectangles 
+- Cityscapes: polygon segmentation
 
 ### Main functions:
--scan
-    -input: Dataset in supported format
-    -output: Dataset root (more about- click) 
--dump_sly
-    -input: Dataset root
-    -output: Dataset in [Supervisely](https://supervisely.com/) format
--upload
-    -Upload local output to Supervisely
+- scan
+    - input: Dataset in supported format
+    - output: Dataset root (more about- click)
+- dump_sly
+    - input: Dataset root
+    - output: Dataset in [Supervisely](https://supervisely.com/) format
+- upload
+    - Upload local output to Supervisely
 
 ## Requirements:
   
