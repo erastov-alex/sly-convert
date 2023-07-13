@@ -7,7 +7,7 @@ import os
 #     a.dump_sly()
 #     a.upload(delete = True)
 
-
+a = True
 
 a = ds_manager.Dataset()
 a.root = ds_manager.scan(a)
