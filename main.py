@@ -1,15 +1,16 @@
-import src
+import ds_manager
 import os
 
 # for folder in os.listdir('input'):
-#     a = src.Dataset(data = os.path.join('input', folder))
-#     a.root = src.scan(a)
+#     a = ds_manager.Dataset(data = os.path.join('input', folder))
+#     a.root = ds_manager.scan(a)
 #     a.dump_sly()
 #     a.upload(delete = True)
 
 
 
-a = src.Dataset()
-# a.root = src.scan(a)
-# a.dump_sly()
-a.upload(delete = False)
+a = ds_manager.Dataset()
+a.root = ds_manager.scan(a)
+a.dump_sly()
+a.upload(delete = True)
+
