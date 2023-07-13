@@ -8,7 +8,10 @@ import numpy as np
 import cv2
 
 
-class Coco(Dataset):#WORKS WITH POLYGONS AND RECTANGLES
+class Coco(Dataset):
+    """
+    WORKS WITH POLYGONS AND RECTANGLES
+    """
     def __init__(self, image_ext, img_path, data, mask):
         name = 'COCO_Dataset'
         super().__init__(name=name, data=data, image_ext=image_ext, img_path=img_path, mask = mask)
@@ -42,6 +45,15 @@ class Coco(Dataset):#WORKS WITH POLYGONS AND RECTANGLES
         if not isinstance(segmentation, list):
             if isinstance(segmentation['counts'], str):
                 maskedArr  = mask.decode(segmentation)
+                mask2 = np.array(maskedArr, dtype=np.bool_)
+                return mask2
+            else:
+                rle_obj = mask.frPyObjects(
+                    segmentation,
+                    segmentation["size"][0],
+                    segmentation["size"][1],
+                )
+                maskedArr  = mask.decode(rle_obj)
                 mask2 = np.array(maskedArr, dtype=np.bool_)
                 # mask2 = maskedArr[:, :, 0].astype(bool)
                 # try:
@@ -78,6 +90,8 @@ class Coco(Dataset):#WORKS WITH POLYGONS AND RECTANGLES
                 if value['file_name'] == img.name:
                     for label in annotations[key]:
                         geometry = self.segmentation_data_fixer(label['segmentation'])
+                        if geometry is None:
+                            print(123)
                         cat_id = label["category_id"]
                         label_name = categories[cat_id]['name']
                         annotation.append([label_name, geometry])

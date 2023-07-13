@@ -61,7 +61,9 @@ def scan(dataset: Dataset):
             if i == 10:
                 break
             for img in os.listdir(folder):
-                img = Image(os.path.join(folder, img))
+                img = Image(os.path.join(folder, img))  
+                if img.name == '000000000632.jpg':
+                    print(123)
                 if dataset.__class__ != Coco:   
                     # ann_file = dataset.findby_name(os.path.splitext(img.name)[0],
                     #                             datapath=dataset.ann_path,

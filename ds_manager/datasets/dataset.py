@@ -127,12 +127,14 @@ class Dataset():
         meta = sly.ProjectMeta()
         uniq_cats = []
         for obj in self.root:
-            for label in obj[1].labels:
-                uniq_cats.append((label.name, type(label.geometry)))
+            for label in obj[1].labels:   
+                uniq_cats.append((label.name, sly.AnyGeometry))
         uniq_cats = set(uniq_cats)
-        for cat in uniq_cats:
-            obj_class = sly.ObjClass(cat[0], cat[1])
-            meta = meta.add_obj_class(obj_class)
+        for cat in uniq_cats:  
+            obj_class = meta.get_obj_class(cat[0])
+            if obj_class is None:   
+                obj_class = sly.ObjClass(cat[0], cat[1])
+                meta = meta.add_obj_class(obj_class)
         meta_json = meta.to_json()
         sly.json.dump_json_file(meta_json, os.path.join('output_sly', "meta.json"))
         i=0
