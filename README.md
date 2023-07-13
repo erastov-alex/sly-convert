@@ -21,7 +21,7 @@ It contains tools for detecting and working with datasets presented in supported
 ### Main functions:
 - scan
     - input: Dataset in supported format
-    - output: Dataset root (more about- click)
+    - output: Dataset root (more about below)
 - dump_sly
     - input: Dataset root
     - output: Dataset in [Supervisely](https://supervisely.com/) format
@@ -56,7 +56,7 @@ classes (sly.Bitmap, sly.Polygon, sly.Rectangle)
  1. Clone repository
  2. Insert your data (Default- /input)
  3. Init your data by init Dataset class [a = Dataset(data= path_to_your_dataset) you can use more than one datasets
- 4. Call scan function and overwrite root data (default root data = []) [a.root = a.scan()]
+ 4. Call scan function and overwrite root data (default root data = []) [a.root = src.scan()]
  5. Dump to Supervisely format [a.dump_sly()]
  6. Upload your data to Supervisely [a.upload()] (be careful and don’t forget to activate entertainment)
 
