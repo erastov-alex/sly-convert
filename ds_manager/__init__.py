@@ -9,3 +9,6 @@ from ds_manager.objects.image import Image
 from ds_manager.objects.label import Label
 
 from ds_manager.tools.scanning import scan
+from ds_manager.tools.uploading import upload
+from ds_manager.tools.dumping_sly import dump_sly
+

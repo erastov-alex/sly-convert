@@ -5,13 +5,13 @@ class Label():
     @classmethod
     def rect(cls,
                geometry: list):
-        # if geometry[0][0] == geometry[1][0] and geometry[1][1] == geometry[2][1]:
-        #     if geometry[2][0] == geometry[3][0] and geometry[3][1] == geometry[3][1]:
-        #         left= geometry[0][1]
-        #         top= geometry[0][0]
-        #         right= geometry[2][1]
-        #         bottom= geometry[2][0]
-        #         return left, top, right, bottom
+        if geometry[0][0] == geometry[1][0] and geometry[1][1] == geometry[2][1]:
+            if geometry[2][0] == geometry[3][0] and geometry[3][1] == geometry[3][1]:
+                left= geometry[0][1]
+                top= geometry[0][0]
+                right= geometry[2][1]
+                bottom= geometry[2][0]
+                return left, top, right, bottom
         return None
 
     def __init__(self,
