@@ -1,10 +1,12 @@
 <div align="center" markdown>
 
 <img src="https://i.ibb.co/fHzfBCW/ds-manager.png"/>
-
+<h1 align="center">Computer Vision Dataset Manager</h1>
 <p align="center">
   <a href="#Overview">Overview</a> •
   <a href="#Requirements">Requirements</a> •
+  <a href="#Dataset root">Dataset root</a> •
+  <a href="#How to use ">How to use</a> •
   <a href="#Test">Tests</a>
 </p>
 
@@ -43,14 +45,14 @@ It contains tools for detecting and working with datasets presented in supported
 ## Requirements:
   
 1. Create environment
-((For using upload function) Create env folder in root. Create local.env, supervisely.env and advance.env using [link] instruction.)
+(For using upload function) Create env folder in root. Create local.env, supervisely.env and advance.env using [instruction](https://developer.supervisely.com/getting-started/environment-variables).
 2. Install requirements.txt
 3. Check strict data format rule  
   
 ### Strict data format rule  
 The data must follow strict rules:
- 1. Images and annotations must be separated.
- 2. Annotation name must refer to image.(except COCO)
+ 1. Images and annotations **must be separated**.
+ 2. Annotation name **must refer to image**.(except COCO)
  3. For COCO: there must be only one JSON file with images instance.
  UPDATE: you can use any quantity of instances
  4. For Pascal VOC: annotation must be XML file or presented in Object+Class PNG masks with labels in single file.
@@ -69,7 +71,7 @@ classes (sly.Bitmap, sly.Polygon, sly.Rectangle)
 
 For example you have folder `dataset` with dataset provide in (for example) in `YOLO` format with `input/dataset` path.
 1. Initialize Dataset class. 
-```
+```python
 my_dataset = ds_manager.Dataset(
                  data = 'input/dataset', #path to folder
                  name = "My dataset", #name of your dataset [Optinal]
@@ -79,16 +81,16 @@ my_dataset = ds_manager.Dataset(
                 )
 ```
 2. Scan your dataset and take root of the dataset 
-```
+```python
 my_dataset.root = ds_manager.scan()
 ```
 3. Dump root to Supervisely
-```
+```python
 ds_manager.dump_sly(my_dataset.root)
 ```
 You'll see `output_sly` folder
 4. Upload your dataset to Supervisely
-```
+```python
 ds_manager.upload(
         delete = False, #Delete `output_sly` folder after import
         api=None, #use if you have Supervisely Api in globals
@@ -101,6 +103,3 @@ ds_manager.upload(
 ## Tests
 Here are datasets on which the functionality was tested.
 All datasets are taken from [Supervisely](https://supervisely.com/) source. You can find some examles [here](https://github.com/erastov-alex/dataset_samples)
-
-
-  
